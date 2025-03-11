@@ -24,6 +24,7 @@ import std.digest.hmac : HMAC;
 import std.digest.sha : SHA1,toHexString;
 import std.bitmanip : nativeToBigEndian,bigEndianToNative;
 import std.format : format;
+import std.datetime : SysTime;
 
 // code adapted from https://github.com/tilaklodha/google-authenticator
 
@@ -39,11 +40,11 @@ public string getHOTPToken(const string secret, const ulong interval)
 	// We're going to use a subset of the generated hash.
 	// Using the last nibble (half-byte) to choose the index to start from.
 	// This number is always appropriate as it's maximum decimal 15, the hash will
-	// have the maximum index 19 (20 bytes of SHA1) and we need 4 bytes.    
+	// have the maximum index 19 (20 bytes of SHA1) and we need 4 bytes.
     const int offset = (sha1sum[19] & 15);
     ubyte[4] h = sha1sum[offset .. offset + 4];
 	//Ignore most significant bits as per RFC 4226.
-	//Takes division from one million to generate a remainder less than < 7 digits    
+	//Takes division from one million to generate a remainder less than < 7 digits
     const uint h12 = (bigEndianToNative!uint(h) & 0x7fffffff) % 1_000_000;
     return format("%06d",h12);
 }
@@ -51,9 +52,16 @@ public string getHOTPToken(const string secret, const ulong interval)
 /// Time-based One Time Password(TOTP)
 public string getTOTPToken(const string secret)
 {
+    import std.datetime : Clock;
+    return getTOTPToken(secret, Clock.currTime);
+}
+
+/// ditto
+public string getTOTPToken(const string secret, SysTime tm)
+{
     //The TOTP token is just a HOTP token seeded with every 30 seconds.
     import std.datetime : Clock;
-    immutable ulong interval = Clock.currTime().toUnixTime() / 30;
+    immutable ulong interval = tm.toUnixTime() / 30;
     return getHOTPToken(secret, interval);
 }
 
@@ -140,4 +148,12 @@ unittest
     auto interval = ulong(50_780_342);  // D allows underscore in numbers to improve readability
     const otp = "971294";
     assert(otp == getHOTPToken(secret, interval));
+}
+
+//testing TOTP overload
+unittest
+{
+    import std.datetime : Clock;
+    auto secret = "dummySECRETdummy";
+    assert(getTOTPToken(secret) == getTOTPToken(secret, Clock.currTime));
 }
